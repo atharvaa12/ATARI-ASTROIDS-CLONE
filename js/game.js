@@ -5,25 +5,57 @@ const SHIP_SIZE = 35; // ship height in pixels
 const SHIP_THRUST = 5; //acceleration in pixels per second
 const TURN_SPEED = 360; //turn speed in degrees per second
 const FRICTION = 0.8; //friction coefficient of space (0= no friction, 1= lots of friction)
-const ASTROIDS_NUM = 3;
+const ASTROIDS_NUM = 1;
 const ASTROIDS_SIZE = 75;
 const ASTROID_SPEED = 60;
 const avgAstroidVertices = 10;
 const ASTROID_ROUGHNESS = 0.4;
 const SHIP_EXPLODE_DUR = 0.1; //duration of the ship explosion
-const MAX_LASER = 10;
+const MAX_LASER = 5;
 const LASER_SPEED = 500;
 const LASER_EXPLODE_DUR = 0.1;
-var ship = setUpShip();
+const TEXT_FADE_TIME = 2.5;
+const TEXT_SIZE = 40;
+const highScoreSaveKey = "highScore";
+var laserAudio = new Sound("sounds/sounds/laser.m4a", 5, 0.5);
+var explodeAudio = new Sound("sounds/sounds/explode.m4a", 5, 0.5);
+var thrustAudio = new Sound("sounds/sounds/thrust.m4a", 5, 0.4);
+var laserHitAudio = new Sound("sounds/sounds/hit.m4a", 5, 0.5);
+var text, textOpacity;
+var level = 0;
+var ship;
 var astroids = [];
+var highScore;
+var score=0;
+function Sound(src, maxStreams = 1, vol = 1.0) {
+  this.streamNum = 0;
+  this.streams = [];
+  for (var i = 0; i < maxStreams; i++) {
+    this.streams.push(new Audio(src));
+    this.streams[i].volume = vol;
+  }
+  this.play = function () {
+    this.streams[this.streamNum].play();
+    this.streamNum = (this.streamNum + 1) % maxStreams;
+  };
+  this.stop = function () {
+    this.streams[this.streamNum].pause();
+    this.streamNum = (this.streamNum + 1) % maxStreams;
+
+    
+  };
+}
 function createAstroid(x, y, r) {
+  var levelMult = 1 + 0.1 * level;
   var roid = {
     x: x,
     y: y,
     xv:
-      ((Math.random() * ASTROID_SPEED) / FPS) * (Math.random() < 0.5 ? 1 : -1),
+      ((Math.random() * ASTROID_SPEED * levelMult) / FPS) *
+      (Math.random() < 0.5 ? 1 : -1),
     yv:
-      ((Math.random() * ASTROID_SPEED) / FPS) * (Math.random() < 0.5 ? 1 : -1),
+      ((Math.random() * ASTROID_SPEED * levelMult) / FPS) *
+      (Math.random() < 0.5 ? 1 : -1),
     r: r,
     angle: Math.random() * Math.PI * 2, //in radians
     vertices: Math.floor(
@@ -41,6 +73,30 @@ function createAstroid(x, y, r) {
 function distBetweenPoints(x1, y1, x2, y2) {
   return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
 }
+function newGame() {
+  if(score===highScore){
+    localStorage.setItem(highScoreSaveKey,score);
+  }
+  level = 0;
+  score=0;
+  if(localStorage.getItem(highScoreSaveKey)===null){
+    highScore=0;
+  }
+  else{
+    console.log(localStorage.getItem(highScoreSaveKey));
+    highScore=parseInt(localStorage.getItem(highScoreSaveKey));
+  }
+  ship = setUpShip();
+  setUpLevel();
+}
+function setUpLevel() {
+  textOpacity = 1.0;
+  level = level + 1;
+  text = "Level " + level;
+  astroids = [];
+  setUpAstroids();
+}
+newGame();
 function destroyAstroid(index) {
   var x = astroids[index].x;
   var y = astroids[index].y;
@@ -54,10 +110,19 @@ function destroyAstroid(index) {
     astroids.push(createAstroid(x, y, Math.ceil(ASTROIDS_SIZE / 4)));
   }
   astroids.splice(index, 1);
+
+  score=score+10;
+  if(score>highScore){
+    highScore=score;
+  }
+  if (astroids.length == 0) {
+    setUpLevel();
+  }
+  
 }
 function setUpAstroids() {
   astroids = [];
-  for (var i = 0; i < ASTROIDS_NUM; i++) {
+  for (var i = 0; i < ASTROIDS_NUM + level; i++) {
     var x, y;
     do {
       x = Math.floor(Math.random() * canvas.width);
@@ -69,10 +134,9 @@ function setUpAstroids() {
     astroids.push(createAstroid(x, y, ASTROIDS_SIZE));
   }
 }
-setUpAstroids();
 
 function setUpShip() {
-  console.log("setting new one");
+  
   return {
     x: canvas.width / 2,
     y: canvas.height / 2,
@@ -87,7 +151,14 @@ function setUpShip() {
     },
     canShoot: true,
     lasers: [],
+    dead: false,
   };
+}
+function gameOver() {
+  ship.dead = true;
+  text = "Game Over";
+  textOpacity = 1.0;
+  setTimeout(newGame, 1000);
 }
 function degreestoRadians(degrees) {
   return degrees * (Math.PI / 180);
@@ -125,6 +196,7 @@ document.addEventListener("keydown", keyDown);
 document.addEventListener("keyup", keyUp);
 function explodeShip() {
   ship.explodeDuration = Math.ceil(SHIP_EXPLODE_DUR * FPS);
+  explodeAudio.play();
 }
 function shootLaser() {
   //create laser
@@ -138,6 +210,7 @@ function shootLaser() {
       yv: (-LASER_SPEED * Math.sin(degreestoRadians(ship.angleOfAxis))) / FPS,
       explodeDuration: 0,
     });
+    laserAudio.play();
   }
 }
 setInterval(update, 1000 / FPS);
@@ -149,43 +222,51 @@ function update() {
   can.strokeStyle = "white";
   can.lineWidth = SHIP_SIZE / 20;
   if (ship.thrusting) {
+    thrustAudio.play();
     ship.thrust.x +=
       (SHIP_THRUST * Math.cos(degreestoRadians(ship.angleOfAxis))) / FPS;
     ship.thrust.y -=
       (SHIP_THRUST * Math.sin(degreestoRadians(ship.angleOfAxis))) / FPS;
   } else {
+    thrustAudio.stop();
     ship.thrust.x -= (FRICTION * ship.thrust.x) / FPS;
     ship.thrust.y -= (FRICTION * ship.thrust.y) / FPS;
   }
   if (!exploding) {
-    can.beginPath();
-    can.moveTo(
-      ship.x + ship.r * Math.cos(degreestoRadians(ship.angleOfAxis)),
-      ship.y - ship.r * Math.sin(degreestoRadians(ship.angleOfAxis))
-    ); //nose of the ship
-    can.lineTo(
-      ship.x -
-        ship.r *
-          (Math.cos(degreestoRadians(ship.angleOfAxis)) +
-            Math.sin(degreestoRadians(ship.angleOfAxis))),
-      ship.y +
-        ship.r *
-          (Math.sin(degreestoRadians(ship.angleOfAxis)) -
-            Math.cos(degreestoRadians(ship.angleOfAxis)))
-    ); //rear left end
-    can.lineTo(
-      ship.x -
-        ship.r *
-          (Math.cos(degreestoRadians(ship.angleOfAxis)) -
-            Math.sin(degreestoRadians(ship.angleOfAxis))),
-      ship.y +
-        ship.r *
-          (Math.sin(degreestoRadians(ship.angleOfAxis)) +
-            Math.cos(degreestoRadians(ship.angleOfAxis)))
-    ); //rear right end
+    // console.log(text,"level "+level);
+    if (
+      ship.dead === false &&
+      ((textOpacity <= 0 && text === "Game Over") || text === "Level " + level)
+    ) {
+      can.beginPath();
+      can.moveTo(
+        ship.x + ship.r * Math.cos(degreestoRadians(ship.angleOfAxis)),
+        ship.y - ship.r * Math.sin(degreestoRadians(ship.angleOfAxis))
+      ); //nose of the ship
+      can.lineTo(
+        ship.x -
+          ship.r *
+            (Math.cos(degreestoRadians(ship.angleOfAxis)) +
+              Math.sin(degreestoRadians(ship.angleOfAxis))),
+        ship.y +
+          ship.r *
+            (Math.sin(degreestoRadians(ship.angleOfAxis)) -
+              Math.cos(degreestoRadians(ship.angleOfAxis)))
+      ); //rear left end
+      can.lineTo(
+        ship.x -
+          ship.r *
+            (Math.cos(degreestoRadians(ship.angleOfAxis)) -
+              Math.sin(degreestoRadians(ship.angleOfAxis))),
+        ship.y +
+          ship.r *
+            (Math.sin(degreestoRadians(ship.angleOfAxis)) +
+              Math.cos(degreestoRadians(ship.angleOfAxis)))
+      ); //rear right end
 
-    can.closePath();
-    can.stroke();
+      can.closePath();
+      can.stroke();
+    }
   } else {
     //draw explosion
     can.fillStyle = "red";
@@ -306,6 +387,22 @@ function update() {
       astroids[i].y = 0 - astroids[i].r;
     }
   }
+  if (textOpacity > 0) {
+    can.fillStyle = "rgba(255,255,255, " + textOpacity + ")";
+    can.font = "small-caps " + TEXT_SIZE + "px Arial";
+    can.fillText(text, canvas.width / 2 - TEXT_SIZE * 4, canvas.height * 0.4);
+    textOpacity -= 1.0 / TEXT_FADE_TIME / FPS;
+  }
+  can.textAlign = "right";
+  can.textBaseline = "middle";
+  can.fillStyle = "white";
+  can.font=TEXT_SIZE/4+" px Arial";
+  can.fillText(" "+score,canvas.width-SHIP_SIZE/2,SHIP_SIZE);
+  can.textAlign = "center";
+  can.textBaseline = "middle";
+  can.fillStyle = "white";
+  can.font=TEXT_SIZE/4+" px Arial";
+  can.fillText("Best: "+highScore,canvas.width/2,SHIP_SIZE);
   //detect laser hits
   var ax, ay, ar, lx, ly;
   for (var i = astroids.length - 1; i >= 0; i--) {
@@ -320,6 +417,7 @@ function update() {
         distBetweenPoints(ax, ay, lx, ly) < ar
       ) {
         ship.lasers[j].explodeDuration = Math.ceil(LASER_EXPLODE_DUR * FPS);
+        laserHitAudio.play();
         destroyAstroid(i);
         break;
       }
@@ -327,36 +425,42 @@ function update() {
   }
   //check for collision
   if (!exploding) {
-    for (var i = 0; i < astroids.length; i++) {
-      if (
-        distBetweenPoints(ship.x, ship.y, astroids[i].x, astroids[i].y) <
-        ship.r + astroids[i].r
-      ) {
-        explodeShip();
-        destroyAstroid(i);
+    if (
+      ship.dead === false &&
+      ((textOpacity <= 0 && text === "Game Over") || text === "Level " + level)
+    ) {
+      for (var i = 0; i < astroids.length; i++) {
+        if (
+          distBetweenPoints(ship.x, ship.y, astroids[i].x, astroids[i].y) <
+          ship.r + astroids[i].r
+        ) {
+          explodeShip();
+          destroyAstroid(i);
+          gameOver();
+        }
       }
-    }
 
-    ship.angleOfAxis += ship.rot; //rotate ship
-    //move ship
-    ship.x += ship.thrust.x;
-    ship.y += ship.thrust.y;
-    //handle edge case
-    if (ship.x < 0 - ship.r) {
-      ship.x = canvas.width + ship.r;
-    } else if (ship.x > canvas.width + ship.r) {
-      ship.x = 0 - ship.r;
-    }
-    if (ship.y < 0 - ship.r) {
-      ship.y = canvas.height + ship.r;
-    } else if (ship.y > canvas.height + ship.r) {
-      ship.y = 0 - ship.r;
-    }
-  } else {
-    console.log(ship.explodeDuration);
-    ship.explodeDuration--;
-    if (ship.explodeDuration == 0) {
-      ship = setUpShip();
+      ship.angleOfAxis += ship.rot; //rotate ship
+      //move ship
+      ship.x += ship.thrust.x;
+      ship.y += ship.thrust.y;
+      //handle edge case
+      if (ship.x < 0 - ship.r) {
+        ship.x = canvas.width + ship.r;
+      } else if (ship.x > canvas.width + ship.r) {
+        ship.x = 0 - ship.r;
+      }
+      if (ship.y < 0 - ship.r) {
+        ship.y = canvas.height + ship.r;
+      } else if (ship.y > canvas.height + ship.r) {
+        ship.y = 0 - ship.r;
+      }
+    } else {
+      
+      ship.explodeDuration--;
+      if (ship.explodeDuration == 0) {
+        ship = setUpShip();
+      }
     }
   }
 
@@ -372,7 +476,16 @@ function update() {
       ship.lasers[i].x += ship.lasers[i].xv;
       ship.lasers[i].y += ship.lasers[i].yv;
     }
+    if (
+      ship.lasers[i].x < 0 ||
+      ship.lasers[i].x > canvas.width ||
+      ship.lasers[i].y < 0 ||
+      ship.lasers[i].y > canvas.height
+    ) {
+      ship.lasers.splice(i, 1);
+    }
   }
+
   for (var i = 0; i < astroids.length; i++) {
     var x = astroids[i].x;
     var y = astroids[i].y;
