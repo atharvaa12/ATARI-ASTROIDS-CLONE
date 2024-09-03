@@ -19,7 +19,7 @@ const TEXT_SIZE = 40;
 const highScoreSaveKey = "highScore";
 var laserAudio = new Sound("sounds/sounds/laser.m4a", 5, 0.5);
 var explodeAudio = new Sound("sounds/sounds/explode.m4a", 5, 0.5);
-var thrustAudio = new Sound("sounds/sounds/thrust.m4a", 5, 0.4);
+var thrustAudio = new Sound("sounds/sounds/thrust.m4a", 1, 0.4);
 var laserHitAudio = new Sound("sounds/sounds/hit.m4a", 5, 0.5);
 var text, textOpacity;
 var level = 0;
@@ -83,7 +83,7 @@ function newGame() {
     highScore=0;
   }
   else{
-    console.log(localStorage.getItem(highScoreSaveKey));
+   
     highScore=parseInt(localStorage.getItem(highScoreSaveKey));
   }
   ship = setUpShip();
@@ -164,15 +164,26 @@ function degreestoRadians(degrees) {
   return degrees * (Math.PI / 180);
 }
 function keyDown(event) {
+ 
   if (event.keyCode === 32) {
+    if(ship.dead===false && ((textOpacity <= 0 && text === "Game Over") || text === "Level " + level)){
     shootLaser();
+    }
   } else if (event.keyCode === 37) {
     //rotate left
 
     ship.rot = TURN_SPEED / FPS;
   } else if (event.keyCode === 38) {
+    console.log("here");
+    
+    if(ship.dead===false && ((textOpacity <= 0 && text === "Game Over") || text === "Level " + level)){
     //thrust
     ship.thrusting = true;
+    thrustAudio.play();
+    }
+    else{
+      return ;
+    }
   } else if (event.keyCode === 39) {
     //rotate right
     ship.rot = -TURN_SPEED / FPS;
@@ -186,6 +197,7 @@ function keyUp(event) {
     ship.rot = 0;
   } else if (event.keyCode === 38) {
     //thrust
+    thrustAudio.stop();
     ship.thrusting = false;
   } else if (event.keyCode === 39) {
     //rotate right
@@ -196,10 +208,13 @@ document.addEventListener("keydown", keyDown);
 document.addEventListener("keyup", keyUp);
 function explodeShip() {
   ship.explodeDuration = Math.ceil(SHIP_EXPLODE_DUR * FPS);
+  ship.canShoot = false;
+  thrustAudio.stop();
   explodeAudio.play();
 }
 function shootLaser() {
   //create laser
+
   if (ship.canShoot && ship.lasers.length < MAX_LASER) {
     ship.lasers.push({
       //from the nose of the ship
@@ -222,13 +237,13 @@ function update() {
   can.strokeStyle = "white";
   can.lineWidth = SHIP_SIZE / 20;
   if (ship.thrusting) {
-    thrustAudio.play();
+  
     ship.thrust.x +=
       (SHIP_THRUST * Math.cos(degreestoRadians(ship.angleOfAxis))) / FPS;
     ship.thrust.y -=
       (SHIP_THRUST * Math.sin(degreestoRadians(ship.angleOfAxis))) / FPS;
   } else {
-    thrustAudio.stop();
+  
     ship.thrust.x -= (FRICTION * ship.thrust.x) / FPS;
     ship.thrust.y -= (FRICTION * ship.thrust.y) / FPS;
   }
