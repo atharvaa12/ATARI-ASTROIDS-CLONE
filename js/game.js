@@ -74,6 +74,10 @@ function distBetweenPoints(x1, y1, x2, y2) {
   return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
 }
 function newGame() {
+   laserAudio = new Sound("sounds/sounds/laser.m4a", 5, 0.5);
+  explodeAudio = new Sound("sounds/sounds/explode.m4a", 5, 0.5);
+  thrustAudio = new Sound("sounds/sounds/thrust.m4a", 1, 0.4);
+  laserHitAudio = new Sound("sounds/sounds/hit.m4a", 5, 0.5);
   if(score===highScore){
     localStorage.setItem(highScoreSaveKey,score);
   }
@@ -174,7 +178,7 @@ function keyDown(event) {
 
     ship.rot = TURN_SPEED / FPS;
   } else if (event.keyCode === 38) {
-    console.log("here");
+   
     
     if(ship.dead===false && ((textOpacity <= 0 && text === "Game Over") || text === "Level " + level)){
     //thrust
